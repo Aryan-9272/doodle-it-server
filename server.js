@@ -11,6 +11,8 @@ const PORT = process.env.PORT || 5000;
 
 io.on("connection",(socket)=>{
     console.log('Client connected with socket id : ',socket.id);
+    socket.on("create-room",(msg)=>{
+    })
 });
 
 server.listen(PORT, () => {
