@@ -32,6 +32,7 @@ const createPlayer = (msg, socket, isAdmin, color) => {
     isAdmin: isAdmin,
     score: 0,
     color: color,
+    isReady: false,
   };
 };
 
@@ -54,7 +55,7 @@ io.on("connection", (socket) => {
     rooms.push(room);
     // console.log(room.roomCode);
     socket.join(room.roomCode);
-    io.to(room.roomCode).emit("player-joined", room);
+    io.to(room.roomCode).emit("player-list-update", room);
     io.to(room.roomCode).emit("chat-to-client", {
       senderID: "SYSTEM_MSG",
       chatMsg: `${player.name} has joined the game.`,
@@ -69,7 +70,7 @@ io.on("connection", (socket) => {
     let player = createPlayer(msg, socket, false, color);
     room.players.push(player);
     socket.join(room.roomCode);
-    io.to(room.roomCode).emit("player-joined", room);
+    io.to(room.roomCode).emit("player-list-update", room);
     io.to(room.roomCode).emit("chat-to-client", {
       senderID: "SYSTEM_MSG",
       chatMsg: `${player.name} has joined the game.`,
@@ -90,6 +91,18 @@ io.on("connection", (socket) => {
       chatMsg: msg.chatMsg,
       color: player.color,
     });
+  });
+  socket.on("player-ready", (msg) => {
+    let room = rooms.find((room) => {
+      return room.roomCode === msg.roomCode;
+    });
+    let player = room.players.find((player) => {
+      return player.playerid === socket.id;
+    });
+    if (player.isReady != true) {
+      player.isReady = true;
+      io.to(room.roomCode).emit("player-list-update", room);
+    }
   });
 });
 
