@@ -18,8 +18,8 @@ const createRoom = (msg) => {
     rounds: msg.rounds,
     currRound: 1,
     timeLimit: msg.timeLimit,
+    startTime: 5 * 60,
     players: [],
-    chats: [],
     chatColors: [...chatColors],
   };
 };
@@ -43,25 +43,41 @@ const chooseColor = (chatColors) => {
   return color;
 };
 
+const checkAllReady = (players) => {
+  let count = 0;
+  for (let i = 0; i < players.length; i++) {
+    if (players[i].isReady == true) count++;
+  }
+  return count === players.length ? true : false;
+};
+
 let rooms = [];
 
 io.on("connection", (socket) => {
-  // console.log("Client connected with socket id : ", socket.id);
   socket.on("create-room", (msg) => {
     let room = createRoom(msg);
     let color = chooseColor(room.chatColors);
     let player = createPlayer(msg, socket, true, color);
     room.players.push(player);
     rooms.push(room);
-    // console.log(room.roomCode);
     socket.join(room.roomCode);
-    io.to(room.roomCode).emit("player-list-update", room);
+    io.to(room.roomCode).emit(
+      "player-joined",
+      ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+    );
+    io.to(room.roomCode).emit("player-list-update", room.players);
     io.to(room.roomCode).emit("chat-to-client", {
       senderID: "SYSTEM_MSG",
       chatMsg: `${player.name} has joined the game.`,
       color: "lime",
     });
+    const interval = setInterval(() => {
+      if (room.startTime > 0) room.startTime--;
+      io.to(room.roomCode).emit("round-timer-update", room.startTime);
+      if (room.startTime == 0) clearInterval(interval);
+    }, 1000);
   });
+
   socket.on("join-room", (msg) => {
     let room = rooms.find((room) => {
       return room.roomCode === msg.roomCode;
@@ -70,13 +86,18 @@ io.on("connection", (socket) => {
     let player = createPlayer(msg, socket, false, color);
     room.players.push(player);
     socket.join(room.roomCode);
-    io.to(room.roomCode).emit("player-list-update", room);
+    io.to(room.roomCode).emit(
+      "player-joined",
+      ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+    );
+    io.to(room.roomCode).emit("player-list-update", room.players);
     io.to(room.roomCode).emit("chat-to-client", {
       senderID: "SYSTEM_MSG",
       chatMsg: `${player.name} has joined the game.`,
       color: "lime",
     });
   });
+
   socket.on("chat-to-server", (msg) => {
     let room = rooms.find((room) => {
       return room.roomCode === msg.roomCode;
@@ -92,6 +113,7 @@ io.on("connection", (socket) => {
       color: player.color,
     });
   });
+
   socket.on("player-ready", (msg) => {
     let room = rooms.find((room) => {
       return room.roomCode === msg.roomCode;
@@ -101,7 +123,11 @@ io.on("connection", (socket) => {
     });
     if (player.isReady != true) {
       player.isReady = true;
-      io.to(room.roomCode).emit("player-list-update", room);
+      io.to(room.roomCode).emit("player-list-update", room.players);
+      if (checkAllReady(room.players)) {
+        room.startTime = 5;
+        io.to(room.roomCode).emit("start-round", room);
+      }
     }
   });
 });
