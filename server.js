@@ -67,6 +67,19 @@ const setAllReady = (players) => {
   });
 };
 
+const unsetAllReady = (players) => {
+  players.forEach((player, ind) => {
+    players[ind].isReady = false;
+  });
+};
+
+const unsetResults = (players, results) => {
+  players.forEach((player, ind) => {
+    players[ind].hasSubmit = false;
+  });
+  results.length = 0;
+};
+
 const checkAllSubmit = (players) => {
   return players.every((player) => {
     return player.hasSubmit === true;
@@ -80,12 +93,75 @@ const computeResults = (results, players) => {
 
   results.forEach((result, ind) => {
     results[ind].rank = ind + 1;
-    results[ind].points = (200 * (results.length-ind)) / results.length;
+    results[ind].points = Math.floor(
+      (200 * (results.length - ind)) / results.length +
+        50 * results[ind].confidence
+    );
     let player = players.find((player) => {
       return player.playerid === results[ind].playerid;
     });
     player.score += results[ind].points;
   });
+};
+
+const startRoundTimer = (io, room) => {
+  const interval = setInterval(() => {
+    if (room.startTime > 0) room.startTime--;
+
+    io.to(room.roomCode).emit("round-timer-update", room.startTime);
+
+    if (room.startTime == 0) {
+      clearInterval(interval);
+
+      setAllReady(room.players);
+
+      room.currWord = chooseWord(room.words);
+
+      io.to(room.roomCode).emit("start-round", {
+        word: room.currWord,
+        players: room.players,
+      });
+
+      startGameTimer(io, room);
+    }
+  }, 1000);
+};
+
+const startGameTimer = (io, room) => {
+  const gameInterval = setInterval(() => {
+    if (room.gameTime > 0) room.gameTime--;
+
+    io.to(room.roomCode).emit("game-timer-update", room.gameTime);
+
+    if (room.gameTime == 0) {
+      clearInterval(gameInterval);
+      io.to(room.roomCode).emit("end-round");
+      setTimeout(() => {
+        if (checkAllSubmit(room.players)) {
+          computeResults(room.results, room.players);
+          io.to(room.roomCode).emit("show-results", room.results);
+          io.to(room.roomCode).emit("player-list-update", room.players);
+          setNextRound(io, room);
+        }
+      }, 2000);
+    }
+  }, 1000);
+};
+
+const setNextRound = (io, room) => {
+  if (room.currRound < room.rounds) {
+    room.currRound++;
+    room.startTime = 5 * 60;
+    room.gameTime = room.timeLimit;
+    unsetAllReady(room.players);
+    unsetResults(room.players, room.results);
+    startRoundTimer(io, room);
+    io.to(room.roomCode).emit(
+      "room-update",
+      ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+    );
+    io.to(room.roomCode).emit("player-list-update", room.players);
+  }
 };
 
 let rooms = [];
@@ -101,7 +177,7 @@ io.on("connection", (socket) => {
     socket.join(room.roomCode);
 
     io.to(room.roomCode).emit(
-      "player-joined",
+      "room-update",
       ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
     );
 
@@ -113,43 +189,7 @@ io.on("connection", (socket) => {
       color: "lime",
     });
 
-    const interval = setInterval(() => {
-      if (room.startTime > 0) room.startTime--;
-
-      io.to(room.roomCode).emit("round-timer-update", room.startTime);
-
-      if (room.startTime == 0) {
-        clearInterval(interval);
-
-        setAllReady(room.players);
-
-        room.currWord = chooseWord(room.words);
-
-        io.to(room.roomCode).emit("start-round", {
-          word: room.currWord,
-          players: room.players,
-        });
-
-        const gameInterval = setInterval(() => {
-          if (room.gameTime > 0) room.gameTime--;
-
-          io.to(room.roomCode).emit("game-timer-update", room.gameTime);
-
-          if (room.gameTime == 0) {
-            clearInterval(gameInterval);
-            io.to(room.roomCode).emit("end-round");
-
-            setTimeout(() => {
-              if (checkAllSubmit(room.players)) {
-                computeResults(room.results, room.players);
-                io.to(room.roomCode).emit("show-results", room.results);
-                io.to(room.roomCode).emit("player-list-update", room.players);
-              }
-            }, 2000);
-          }
-        }, 1000);
-      }
-    }, 1000);
+    startRoundTimer(io, room);
   });
 
   socket.on("join-room", (msg) => {
@@ -163,7 +203,7 @@ io.on("connection", (socket) => {
     socket.join(room.roomCode);
 
     io.to(room.roomCode).emit(
-      "player-joined",
+      "room-update",
       ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
     );
 
