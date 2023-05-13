@@ -161,6 +161,8 @@ const setNextRound = (io, room) => {
       ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
     );
     io.to(room.roomCode).emit("player-list-update", room.players);
+  } else {
+    io.to(room.roomCode).emit("finish-game");
   }
 };
 
