@@ -86,6 +86,18 @@ const checkAllSubmit = (players) => {
   });
 };
 
+const removeInactive = (io, room) => {
+  inactivePlayers = [];
+  for (player of room.players) {
+    if (player.hasSubmit === false) {
+      inactivePlayers.push(player.playerid);
+    }
+  }
+  for (id of inactivePlayers) {
+    io.sockets.sockets.get(id).disconnect();
+  }
+};
+
 const computeResults = (results, players) => {
   results.sort((a, b) => {
     return b.confidence - a.confidence;
@@ -105,7 +117,13 @@ const computeResults = (results, players) => {
 };
 
 const startRoundTimer = (io, room) => {
+  let allReady = false;
   const interval = setInterval(() => {
+    if (checkAllReady(room.players) && allReady == false) {
+      room.startTime = 6;
+      allReady = true;
+    }
+
     if (room.startTime > 0) room.startTime--;
 
     io.to(room.roomCode).emit("round-timer-update", room.startTime);
@@ -137,12 +155,11 @@ const startGameTimer = (io, room) => {
       clearInterval(gameInterval);
       io.to(room.roomCode).emit("end-round");
       setTimeout(() => {
-        if (checkAllSubmit(room.players)) {
-          computeResults(room.results, room.players);
-          io.to(room.roomCode).emit("show-results", room.results);
-          io.to(room.roomCode).emit("player-list-update", room.players);
-          setNextRound(io, room);
-        }
+        removeInactive(io, room);
+        computeResults(room.results, room.players);
+        io.to(room.roomCode).emit("show-results", room.results);
+        io.to(room.roomCode).emit("player-list-update", room.players);
+        setNextRound(io, room);
       }, 2000);
     }
   }, 1000);
@@ -249,10 +266,6 @@ io.on("connection", (socket) => {
       player.isReady = true;
 
       io.to(room.roomCode).emit("player-list-update", room.players);
-
-      if (checkAllReady(room.players)) {
-        room.startTime = 6;
-      }
     }
   });
 
@@ -279,6 +292,32 @@ io.on("connection", (socket) => {
         closestMatch: msg.closestMatch,
       });
     }
+  });
+
+  socket.on("disconnect", () => {
+    let room,
+      ind = 0,
+      found = false;
+    for (r of rooms) {
+      ind = 0;
+      for (player of r.players) {
+        if (player.playerid === socket.id) {
+          room = r;
+          found = true;
+          break;
+        }
+        ind++;
+      }
+      if (found) break;
+    }
+    room.chatColors.push(room.players[ind].color);
+    room.players.splice(ind, 1);
+    io.to(room.roomCode).emit("player-list-update", room.players);
+    io.to(room.roomCode).emit("chat-to-client", {
+      senderID: "SYSTEM_MSG",
+      chatMsg: `${player.name} has left the game.`,
+      color: "red",
+    });
   });
 });
 
