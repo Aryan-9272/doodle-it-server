@@ -80,12 +80,6 @@ const unsetResults = (players, results) => {
   results.length = 0;
 };
 
-const checkAllSubmit = (players) => {
-  return players.every((player) => {
-    return player.hasSubmit === true;
-  });
-};
-
 const removeInactive = (io, room) => {
   inactivePlayers = [];
   for (player of room.players) {
@@ -187,137 +181,186 @@ let rooms = [];
 
 io.on("connection", (socket) => {
   socket.on("create-room", (msg) => {
-    let room = createRoom(msg);
-    let color = chooseColor(room.chatColors);
-    let player = createPlayer(msg, socket, true, color);
-    room.players.push(player);
-    rooms.push(room);
+    try {
+      let room = createRoom(msg);
+      let color = chooseColor(room.chatColors);
+      let player = createPlayer(msg, socket, true, color);
+      room.players.push(player);
+      rooms.push(room);
 
-    socket.join(room.roomCode);
+      socket.join(room.roomCode);
 
-    io.to(room.roomCode).emit(
-      "room-update",
-      ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
-    );
+      io.to(room.roomCode).emit(
+        "room-update",
+        ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+      );
 
-    io.to(room.roomCode).emit("player-list-update", room.players);
+      io.to(room.roomCode).emit("player-list-update", room.players);
 
-    io.to(room.roomCode).emit("chat-to-client", {
-      senderID: "SYSTEM_MSG",
-      chatMsg: `${player.name} has joined the game.`,
-      color: "lime",
-    });
+      io.to(room.roomCode).emit("chat-to-client", {
+        senderID: "SYSTEM_MSG",
+        chatMsg: `${player.name} has joined the game.`,
+        color: "lime",
+      });
 
-    startRoundTimer(io, room);
+      startRoundTimer(io, room);
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("join-room", (msg) => {
-    let room = rooms.find((room) => {
-      return room.roomCode === msg.roomCode;
-    });
-    let color = chooseColor(room.chatColors);
-    let player = createPlayer(msg, socket, false, color);
+    try {
+      let room = rooms.find((room) => {
+        return room.roomCode === msg.roomCode;
+      });
+      if (room != undefined) {
+        let color = chooseColor(room.chatColors);
+        let player = createPlayer(msg, socket, false, color);
 
-    room.players.push(player);
-    socket.join(room.roomCode);
+        room.players.push(player);
+        socket.join(room.roomCode);
 
-    io.to(room.roomCode).emit(
-      "room-update",
-      ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
-    );
+        io.to(room.roomCode).emit(
+          "room-update",
+          ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+        );
 
-    io.to(room.roomCode).emit("player-list-update", room.players);
+        io.to(room.roomCode).emit("player-list-update", room.players);
 
-    io.to(room.roomCode).emit("chat-to-client", {
-      senderID: "SYSTEM_MSG",
-      chatMsg: `${player.name} has joined the game.`,
-      color: "lime",
-    });
+        io.to(room.roomCode).emit("chat-to-client", {
+          senderID: "SYSTEM_MSG",
+          chatMsg: `${player.name} has joined the game.`,
+          color: "lime",
+        });
+      } else {
+        io.to(socket.id).emit("room-not-found", {
+          head: "ROOM NOT FOUND",
+          body: [
+            "COULD NOT FIND THE ROOM YOU WERE LOOKING FOR.",
+            "TRY ENTERING THE CORRECT ROOM-ID.",
+          ],
+        });
+      }
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("chat-to-server", (msg) => {
-    let room = rooms.find((room) => {
-      return room.roomCode === msg.roomCode;
-    });
+    try {
+      let room = rooms.find((room) => {
+        return room.roomCode === msg.roomCode;
+      });
 
-    let player = room.players.find((player) => {
-      return player.playerid === socket.id;
-    });
-
-    io.to(room.roomCode).emit("chat-to-client", {
-      senderID: player.playerid,
-      name: player.name,
-      avatar: player.avatar,
-      chatMsg: msg.chatMsg,
-      color: player.color,
-    });
+      let player;
+      if (room != undefined) {
+        player = room.players.find((player) => {
+          return player.playerid === socket.id;
+        });
+      }
+      if (player != undefined) {
+        io.to(room.roomCode).emit("chat-to-client", {
+          senderID: player.playerid,
+          name: player.name,
+          avatar: player.avatar,
+          chatMsg: msg.chatMsg,
+          color: player.color,
+        });
+      }
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("player-ready", (msg) => {
-    let room = rooms.find((room) => {
-      return room.roomCode === msg.roomCode;
-    });
+    try {
+      let room = rooms.find((room) => {
+        return room.roomCode === msg.roomCode;
+      });
 
-    let player = room.players.find((player) => {
-      return player.playerid === socket.id;
-    });
+      let player;
+      if (room != undefined) {
+        player = room.players.find((player) => {
+          return player.playerid === socket.id;
+        });
+      }
 
-    if (player.isReady != true) {
-      player.isReady = true;
+      if (player != undefined) {
+        if (player.isReady != true) {
+          player.isReady = true;
 
-      io.to(room.roomCode).emit("player-list-update", room.players);
+          io.to(room.roomCode).emit("player-list-update", room.players);
+        }
+      }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("send-drawing", (msg) => {
-    let room = rooms.find((room) => {
-      return room.roomCode === msg.roomCode;
-    });
-
-    let player = room.players.find((player) => {
-      return player.playerid === socket.id;
-    });
-
-    if (player.hasSubmit == false) {
-      player.hasSubmit = true;
-      room.results.push({
-        rank: 0,
-        playerid: player.playerid,
-        name: player.name,
-        avatar: player.avatar,
-        word: msg.word,
-        drawing: msg.img,
-        confidence: msg.confidence,
-        points: 0,
-        closestMatch: msg.closestMatch,
+    try {
+      let room = rooms.find((room) => {
+        return room.roomCode === msg.roomCode;
       });
+
+      let player;
+      if (room != undefined) {
+        player = room.players.find((player) => {
+          return player.playerid === socket.id;
+        });
+      }
+      if (player != undefined) {
+        if (player.hasSubmit == false) {
+          player.hasSubmit = true;
+          room.results.push({
+            rank: 0,
+            playerid: player.playerid,
+            name: player.name,
+            avatar: player.avatar,
+            word: msg.word,
+            drawing: msg.img,
+            confidence: msg.confidence,
+            points: 0,
+            closestMatch: msg.closestMatch,
+          });
+        }
+      }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("disconnect", () => {
-    let room,
-      ind = 0,
-      found = false;
-    for (r of rooms) {
-      ind = 0;
-      for (player of r.players) {
-        if (player.playerid === socket.id) {
-          room = r;
-          found = true;
-          break;
+    try {
+      let room,
+        ind = 0,
+        found = false;
+      for (r of rooms) {
+        ind = 0;
+        for (player of r.players) {
+          if (player.playerid === socket.id) {
+            room = r;
+            found = true;
+            break;
+          }
+          ind++;
         }
-        ind++;
+        if (found) break;
       }
-      if (found) break;
+      if (found) {
+        room.chatColors.push(room.players[ind].color);
+        room.players.splice(ind, 1);
+        io.to(room.roomCode).emit("player-list-update", room.players);
+        io.to(room.roomCode).emit("chat-to-client", {
+          senderID: "SYSTEM_MSG",
+          chatMsg: `${player.name} has left the game.`,
+          color: "red",
+        });
+      }
+    } catch (error) {
+      console.log(error);
     }
-    room.chatColors.push(room.players[ind].color);
-    room.players.splice(ind, 1);
-    io.to(room.roomCode).emit("player-list-update", room.players);
-    io.to(room.roomCode).emit("chat-to-client", {
-      senderID: "SYSTEM_MSG",
-      chatMsg: `${player.name} has left the game.`,
-      color: "red",
-    });
   });
 });
 
