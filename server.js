@@ -193,6 +193,8 @@ io.on("connection", (socket) => {
 
       socket.join(room.roomCode);
 
+      io.to(room.roomCode).emit("room-created");
+
       io.to(room.roomCode).emit(
         "room-update",
         ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
