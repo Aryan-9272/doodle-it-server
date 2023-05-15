@@ -355,6 +355,42 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("leave-room", (roomCode) => {
+    try {
+      let room = rooms.find((room) => {
+        return room.roomCode === roomCode;
+      });
+      let player;
+      if (room != undefined) {
+        if (room != undefined) {
+          player = room.players.find((player) => {
+            return player.playerid === socket.id;
+          });
+        }
+      }
+      if (player != undefined) {
+        let ind = room.players.findIndex((p) => {
+          return p === player;
+        });
+        room.players.splice(ind, 1);
+        io.to(room.roomCode).emit("player-list-update", room.players);
+        io.to(room.roomCode).emit("chat-to-client", {
+          senderID: "SYSTEM_MSG",
+          chatMsg: `${player.name} has left the game.`,
+          color: "red",
+        });
+        if (room.players.length === 0) {
+          let r_ind = rooms.findIndex((r) => {
+            return r === room;
+          });
+          rooms.splice(r_ind, 1);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  });
+
   socket.on("disconnect", () => {
     try {
       let room,
