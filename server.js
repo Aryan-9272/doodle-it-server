@@ -17,6 +17,7 @@ const createRoom = (msg) => {
     maxPlayers: msg.maxPlayers,
     rounds: msg.rounds,
     currRound: 1,
+    roundStart: false,
     currWord: "",
     timeLimit: msg.timeLimit,
     startTime: 5 * 60,
@@ -116,6 +117,7 @@ const startRoundTimer = (io, room) => {
     if (checkAllReady(room.players) && allReady == false) {
       room.startTime = 6;
       allReady = true;
+      room.roundStart = true;
     }
 
     if (room.startTime > 0) room.startTime--;
@@ -161,6 +163,7 @@ const startGameTimer = (io, room) => {
 
 const setNextRound = (io, room) => {
   if (room.currRound < room.rounds) {
+    room.roundStart = false;
     room.currRound++;
     room.startTime = 5 * 60;
     room.gameTime = room.timeLimit;
@@ -214,12 +217,22 @@ io.on("connection", (socket) => {
       let room = rooms.find((room) => {
         return room.roomCode === msg.roomCode;
       });
-      if (room != undefined) {
+      if (room != undefined && room.roundStart === true) {
+        io.to(socket.id).emit("round-active", {
+          head: "CANNOT JOIN ROOM",
+          body: [
+            "THE ROUND HAS ALREADY STARTED FOR THE ROOM.",
+            "TRY JOINING THE ROOM AFTER SOME TIME.",
+          ],
+        });
+      } else if (room != undefined && room.roundStart === false) {
         let color = chooseColor(room.chatColors);
         let player = createPlayer(msg, socket, false, color);
 
         room.players.push(player);
         socket.join(room.roomCode);
+
+        io.to(room.roomCode).emit("room-found");
 
         io.to(room.roomCode).emit(
           "room-update",
