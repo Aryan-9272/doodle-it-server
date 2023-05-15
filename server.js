@@ -230,24 +230,33 @@ io.on("connection", (socket) => {
       } else if (room != undefined && room.roundStart === false) {
         let color = chooseColor(room.chatColors);
         let player = createPlayer(msg, socket, false, color);
+        if (room.players.length < room.maxPlayers) {
+          room.players.push(player);
+          socket.join(room.roomCode);
 
-        room.players.push(player);
-        socket.join(room.roomCode);
+          io.to(room.roomCode).emit("room-found");
 
-        io.to(room.roomCode).emit("room-found");
+          io.to(room.roomCode).emit(
+            "room-update",
+            ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+          );
 
-        io.to(room.roomCode).emit(
-          "room-update",
-          ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
-        );
+          io.to(room.roomCode).emit("player-list-update", room.players);
 
-        io.to(room.roomCode).emit("player-list-update", room.players);
-
-        io.to(room.roomCode).emit("chat-to-client", {
-          senderID: "SYSTEM_MSG",
-          chatMsg: `${player.name} has joined the game.`,
-          color: "lime",
-        });
+          io.to(room.roomCode).emit("chat-to-client", {
+            senderID: "SYSTEM_MSG",
+            chatMsg: `${player.name} has joined the game.`,
+            color: "lime",
+          });
+        } else {
+          io.to(socket.id).emit("room-full", {
+            head: "ROOM IS FULL",
+            body: [
+              "THE ROOM IS CURRENTLY AT MAXIMUM CAPACITY AND CANNOT ACCOMMODATE MORE PLAYERS.",
+              "TRY JOINING THE ROOM LATER.",
+            ],
+          });
+        }
       } else {
         io.to(socket.id).emit("room-not-found", {
           head: "ROOM NOT FOUND",
@@ -372,6 +381,12 @@ io.on("connection", (socket) => {
           chatMsg: `${player.name} has left the game.`,
           color: "red",
         });
+        if (room.players.length === 0) {
+          let r_ind = rooms.findIndex((r) => {
+            return r === room;
+          });
+          rooms.splice(r_ind, 1);
+        }
       }
     } catch (error) {
       console.log(error);
