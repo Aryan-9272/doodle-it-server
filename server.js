@@ -190,25 +190,25 @@ io.on("connection", (socket) => {
       let player = createPlayer(msg, socket, true, color);
       room.players.push(player);
       rooms.push(room);
-
       socket.join(room.roomCode);
-
       io.to(room.roomCode).emit("room-created");
 
-      io.to(room.roomCode).emit(
-        "room-update",
-        ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
-      );
+      setTimeout(() => {
+        io.to(room.roomCode).emit(
+          "room-update",
+          ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+        );
 
-      io.to(room.roomCode).emit("player-list-update", room.players);
+        io.to(room.roomCode).emit("player-list-update", room.players);
 
-      io.to(room.roomCode).emit("chat-to-client", {
-        senderID: "SYSTEM_MSG",
-        chatMsg: `${player.name} has joined the game.`,
-        color: "lime",
-      });
+        io.to(room.roomCode).emit("chat-to-client", {
+          senderID: "SYSTEM_MSG",
+          chatMsg: `${player.name} has joined the game.`,
+          color: "lime",
+        });
 
-      startRoundTimer(io, room);
+        startRoundTimer(io, room);
+      }, 500);
     } catch (error) {
       console.log(error);
     }
@@ -233,21 +233,22 @@ io.on("connection", (socket) => {
         if (room.players.length < room.maxPlayers) {
           room.players.push(player);
           socket.join(room.roomCode);
-
           io.to(room.roomCode).emit("room-found");
 
-          io.to(room.roomCode).emit(
-            "room-update",
-            ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
-          );
+          setTimeout(() => {
+            io.to(room.roomCode).emit(
+              "room-update",
+              ({ roomCode, rounds, currRound, timeLimit, startTime } = room)
+            );
 
-          io.to(room.roomCode).emit("player-list-update", room.players);
+            io.to(room.roomCode).emit("player-list-update", room.players);
 
-          io.to(room.roomCode).emit("chat-to-client", {
-            senderID: "SYSTEM_MSG",
-            chatMsg: `${player.name} has joined the game.`,
-            color: "lime",
-          });
+            io.to(room.roomCode).emit("chat-to-client", {
+              senderID: "SYSTEM_MSG",
+              chatMsg: `${player.name} has joined the game.`,
+              color: "lime",
+            });
+          }, 500);
         } else {
           io.to(socket.id).emit("room-full", {
             head: "ROOM IS FULL",
